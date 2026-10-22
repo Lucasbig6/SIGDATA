@@ -1,21 +1,32 @@
+"use client";
+
+import { useState } from "react";
 import Card from "@mui/material/Card";
 import {
   ArrowUpRight,
   ChartNoAxesCombined,
+  Check,
   FileText,
   PanelsTopLeft,
+  Sparkles,
   Table2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { regionRows } from "@/lib/project-data";
+import { chartBars, regionRows } from "@/lib/project-data";
+import { useSavedResults } from "@/lib/results-store";
 
-const chartBars: { label: string; height: number; accent: boolean }[] = [
-  { label: "Jul", height: 27, accent: false },
-  { label: "Ago", height: 35, accent: false },
-  { label: "Set", height: 54, accent: true },
+const extraRows = [
+  { region: "Norte", value: "R$ 180.000" },
+  { region: "Exterior", value: "R$ 90.000" },
 ];
 
 export function ResultsPanel() {
+  const savedResults = useSavedResults();
+  const [tableOpen, setTableOpen] = useState(false);
+  const [addedToPanel, setAddedToPanel] = useState(false);
+
+  const rows = tableOpen ? [...regionRows, ...extraRows] : regionRows;
+
   return (
     <Card className="flex w-full min-w-0 flex-col min-[1440px]:h-full min-[1440px]:shrink-0 min-[1440px]:w-[462px]">
       <div className="flex h-16 w-full shrink-0 items-center gap-[10px] border-b border-line px-5">
@@ -23,7 +34,7 @@ export function ResultsPanel() {
         <p className="text-base leading-[1.5] text-ink">Resultados</p>
         <div className="flex min-w-0 flex-1 items-start justify-end">
           <p className="whitespace-nowrap text-xs leading-[1.5] text-muted">
-            3 salvos
+            {3 + savedResults.length} salvos
           </p>
         </div>
       </div>
@@ -32,6 +43,30 @@ export function ResultsPanel() {
         <p className="w-full text-xs leading-[1.5] text-muted">
           Transforme descobertas em entregáveis para sua equipe.
         </p>
+
+        {savedResults.length > 0 && (
+          <div className="flex w-full flex-col items-start gap-3 rounded-xl border border-brand/30 p-4">
+            <div className="flex items-center gap-2">
+              <Sparkles size={18} aria-hidden="true" className="text-brand" />
+              <p className="whitespace-nowrap text-xs font-semibold leading-[1.5] text-brand">
+                Salvos pelo assistente
+              </p>
+            </div>
+            {savedResults.map((result) => (
+              <div
+                key={result.id}
+                className="flex w-full items-center justify-between gap-3 border-t border-line pt-[6px]"
+              >
+                <p className="min-w-0 truncate text-[11px] leading-[1.5] text-ink">
+                  {result.title}
+                </p>
+                <p className="shrink-0 text-[10px] leading-[1.5] text-muted">
+                  {result.time}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="flex w-full flex-col items-start gap-3 rounded-xl border border-line p-4 transition-shadow hover:shadow-md">
           <div className="flex items-center gap-2">
@@ -66,7 +101,7 @@ export function ResultsPanel() {
             <p>Região</p>
             <p>Setembro</p>
           </div>
-          {regionRows.map((row) => (
+          {rows.map((row) => (
             <div
               key={row.region}
               className="flex w-full items-start justify-between whitespace-nowrap border-t border-line pt-[6px] text-[11px] leading-[1.5] text-ink"
@@ -77,9 +112,10 @@ export function ResultsPanel() {
           ))}
           <button
             type="button"
+            onClick={() => setTableOpen((current) => !current)}
             className="whitespace-nowrap text-[11px] font-semibold leading-[1.5] text-brand transition-colors hover:text-brand-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
-            Abrir tabela completa →
+            {tableOpen ? "Fechar tabela →" : "Abrir tabela completa →"}
           </button>
         </div>
 
@@ -114,9 +150,23 @@ export function ResultsPanel() {
           <p className="w-full text-[11px] leading-[1.5] text-muted">
             Colunas · receita líquida por mês
           </p>
-          <Button variant="neutral" size="md">
-            Adicionar ao painel
-          </Button>
+          {addedToPanel ? (
+            <p
+              role="status"
+              className="flex w-full items-center gap-1.5 text-xs leading-[1.5] text-success"
+            >
+              <Check size={15} aria-hidden="true" />
+              Adicionado ao Painel Comercial (simulação)
+            </p>
+          ) : (
+            <Button
+              variant="neutral"
+              size="md"
+              onClick={() => setAddedToPanel(true)}
+            >
+              Adicionar ao painel
+            </Button>
+          )}
         </div>
 
         <p className="w-full text-[11px] leading-[1.5] text-muted">

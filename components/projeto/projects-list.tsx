@@ -3,110 +3,37 @@
 import { useState } from "react";
 import Link from "next/link";
 import Card from "@mui/material/Card";
-import Chip from "@mui/material/Chip";
-import {
-  ChevronRight,
-  FolderOpen,
-  LayoutGrid,
-  List,
-  Plus,
-} from "lucide-react";
+import { ChevronRight, FolderOpen, LayoutGrid, List, SearchX } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useProjects } from "@/lib/projects-store";
+import { NewProjectButton } from "./new-project-dialog";
 
-const projects = [
-  {
-    id: 1,
-    title: "Projeto 01 — Análise comercial",
-    description: "Explore vendas, clientes e metas com IA.",
-    meta: "14 de jul. de 2026 · 11 fontes",
-    updatedDate: "14 de jul. de 2026",
-    updatedMeta: "há 3 meses",
-    sources: 11,
-    href: "/projetos/projeto-01",
-  },
-  {
-    id: 2,
-    title: "Metas e Indicadores 2026",
-    description: "Acompanhamento de KPIs e metas anuais.",
-    meta: "16 de dez. de 2025 · 40 fontes",
-    updatedDate: "16 de dez. de 2025",
-    updatedMeta: "há 10 meses",
-    sources: 40,
-    href: "/projetos/projeto-01",
-  },
-  {
-    id: 3,
-    title: "Vendas por Regional",
-    description: "Desempenho de vendas segmentado por região.",
-    meta: "5 de mar. de 2026 · 50 fontes",
-    updatedDate: "5 de mar. de 2026",
-    updatedMeta: "há 7 meses",
-    sources: 50,
-    href: "/projetos/projeto-01",
-  },
-  {
-    id: 4,
-    title: "Clientes e Recorrência",
-    description: "Análise de retenção e Lifetime Value.",
-    meta: "30 de set. de 2025 · 38 fontes",
-    updatedDate: "30 de set. de 2025",
-    updatedMeta: "há 12 meses",
-    sources: 38,
-    href: "/projetos/projeto-01",
-  },
-  {
-    id: 5,
-    title: "Estoque e Suprimentos",
-    description: "Níveis de estoque, giro e rupturas.",
-    meta: "30 de jan. de 2026 · 13 fontes",
-    updatedDate: "30 de jan. de 2026",
-    updatedMeta: "há 8 meses",
-    sources: 13,
-    href: "/projetos/projeto-01",
-  },
-  {
-    id: 6,
-    title: "Dashboard Financeiro",
-    description: "Receita, custos e margem por período.",
-    meta: "20 de mar. de 2026 · 35 fontes",
-    updatedDate: "20 de mar. de 2026",
-    updatedMeta: "há 7 meses",
-    sources: 35,
-    href: "/projetos/projeto-01",
-  },
-  {
-    id: 7,
-    title: " RH e Pessoas",
-    description: "Headcount, turnover e absenteísmo.",
-    meta: "10 de fev. de 2026 · 8 fontes",
-    updatedDate: "10 de fev. de 2026",
-    updatedMeta: "há 8 meses",
-    sources: 8,
-    href: "/projetos/projeto-01",
-  },
-  {
-    id: 8,
-    title: "Marketing e Aquisição",
-    description: "Campanhas, canais e custo de aquisição.",
-    meta: "22 de abr. de 2026 · 22 fontes",
-    updatedDate: "22 de abr. de 2026",
-    updatedMeta: "há 6 meses",
-    sources: 22,
-    href: "/projetos/projeto-01",
-  },
-];
+type ProjectsListProps = {
+  /** Filtro vindo da busca do header (`/projetos?q=`). */
+  query?: string;
+};
 
-export function ProjectsList() {
+export function ProjectsList({ query = "" }: ProjectsListProps) {
   const [view, setView] = useState<"grid" | "table">("grid");
+  const projects = useProjects();
+
+  const normalized = query.trim().toLowerCase();
+  const filtered = normalized
+    ? projects.filter((project) =>
+        `${project.title} ${project.description} ${project.meta}`
+          .toLowerCase()
+          .includes(normalized),
+      )
+    : projects;
 
   return (
     <div className="flex w-full flex-col items-start gap-5">
       <Card className="flex w-full flex-col overflow-hidden">
         <div className="flex w-full shrink-0 items-center justify-between p-5">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg leading-[1.5] text-ink">Todos os projetos</h2>
+            <h4 className="text-base leading-[1.5] text-ink">Todos os projetos</h4>
             <span className="rounded-md bg-background px-[9px] py-1 text-xs font-medium leading-[1.5] text-muted">
-              {projects.length}
+              {filtered.length}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -138,15 +65,32 @@ export function ProjectsList() {
                 <List size={16} />
               </button>
             </div>
-            <Button variant="primary" size="md" startIcon={<Plus size={16} />}>
-              Novo projeto
-            </Button>
+            <NewProjectButton size="md" className="hidden sm:inline-flex" />
           </div>
         </div>
 
-        {view === "grid" ? (
+        {filtered.length === 0 ? (
+          <div className="flex w-full flex-col items-center gap-3 border-t border-line px-6 py-12 text-center">
+            <SearchX size={26} aria-hidden="true" className="text-muted" />
+            <p className="text-sm font-semibold leading-[1.5] text-ink">
+              Nenhum projeto encontrado{normalized ? ` para “${query}”` : ""}
+            </p>
+            <p className="max-w-[380px] text-xs leading-[1.5] text-muted">
+              Tente outro termo ou crie um novo projeto para começar a explorar
+              seus dados.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {normalized && (
+                <Button href="/projetos" variant="subtle" size="sm">
+                  Limpar busca
+                </Button>
+              )}
+              <NewProjectButton size="sm" label="Criar projeto" />
+            </div>
+          </div>
+        ) : view === "grid" ? (
           <div className="grid w-full grid-cols-1 gap-4 border-t border-line p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 ">
-            {projects.map((project) => (
+            {filtered.map((project) => (
               <Link
                 key={project.id}
                 href={project.href}
@@ -194,7 +138,7 @@ export function ProjectsList() {
                 </p>
                 <span aria-hidden className="size-4 shrink-0" />
               </div>
-              {projects.map((project) => (
+              {filtered.map((project) => (
                 <Link
                   key={project.id}
                   href={project.href}

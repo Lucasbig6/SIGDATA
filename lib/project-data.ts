@@ -61,3 +61,10 @@ export const assistantPlainText = [
   "",
   "Próximo passo: detalhar os segmentos de clientes do Sudeste para identificar o que impulsionou a receita.",
 ].join("\n");
+
+/** Barras do mini-gráfico "Evolução da receita" (painel de Resultados). */
+export const chartBars: { label: string; height: number; accent: boolean }[] = [
+  { label: "Jul", height: 27, accent: false },
+  { label: "Ago", height: 35, accent: false },
+  { label: "Set", height: 54, accent: true },
+];

@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import Alert from "@mui/material/Alert";
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
+import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Tab from "@mui/material/Tab";
@@ -18,13 +20,21 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleCheck,
+  Code,
   Database,
   FileText,
   FolderOpen,
+  MoreVertical,
+  Plus,
   Search,
   Star,
+  Trash2,
+  TriangleAlert,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AddSourceDialog } from "./add-source-dialog";
+import { EditConnectionDialog, ReviewConnectionDialog } from "./source-dialogs";
 import {
   dataSources,
   sourceDetails,
@@ -32,6 +42,7 @@ import {
   statusStyles,
   typeOptions,
   type DataSource,
+  type SourceDetails,
   type SourceStatus,
 } from "@/lib/sources-data";
 
@@ -44,13 +55,11 @@ const boxIcons: Record<string, typeof Database> = {
   "icon-file-text": FileText,
 };
 
-function StatusBadge({
-  status,
-  label,
-}: {
-  status: SourceStatus;
-  label: string;
-}) {
+const PAGE_SIZE = 5;
+
+type Message = { tone: "success" | "error" | "info"; text: string };
+
+function StatusBadge({ status, label }: { status: SourceStatus; label: string }) {
   const style = statusStyles[status];
   return (
     <Chip
@@ -84,12 +93,29 @@ export function FontesView() {
   const [typeFilter, setTypeFilter] = useState<string>("Todos os tipos");
   const [statusFilter, setStatusFilter] = useState<string>("Todos os estados");
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
-  const [selectedId, setSelectedId] = useState<string>("vendas-2026");
+  // Primeira fonte selecionada por padrão (painel de detalhes visível).
+  const [selectedId, setSelectedId] = useState<string | null>(dataSources[0].id);
   const [tab, setTab] = useState<DetailTab>("Visão geral");
+  const [page, setPage] = useState(1);
+  const [showAllFields, setShowAllFields] = useState(false);
+  const [message, setMessage] = useState<Message | null>(null);
+
+  // Estado local das fontes: permite sincronizar/criar/remover na sessão.
+  const [sources, setSources] = useState<DataSource[]>(dataSources);
+  const [detailsMap, setDetailsMap] = useState<Record<string, SourceDetails>>(
+    sourceDetails,
+  );
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [editFor, setEditFor] = useState<DataSource | null>(null);
+  const [reviewFor, setReviewFor] = useState<DataSource | null>(null);
+  const [menu, setMenu] = useState<{ id: string; anchor: HTMLElement } | null>(
+    null,
+  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return dataSources.filter((source) => {
+    return sources.filter((source) => {
       const matchesQuery =
         q.length === 0 ||
         source.name.toLowerCase().includes(q) ||
@@ -99,17 +125,30 @@ export function FontesView() {
         statusFilter === "Todos os estados" || source.status === statusFilter;
       return matchesQuery && matchesType && matchesStatus;
     });
-  }, [query, typeFilter, statusFilter]);
+  }, [sources, query, typeFilter, statusFilter]);
 
-  const selected =
-    dataSources.find((source) => source.id === selectedId) ?? dataSources[0]!;
-  const details = sourceDetails[selected.id]!;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const start = filtered.length > 0 ? (safePage - 1) * PAGE_SIZE + 1 : 0;
+  const end = Math.min(safePage * PAGE_SIZE, filtered.length);
+  const pageRows = filtered.slice(start - 1, end);
+
+  const selected = selectedId
+    ? (sources.find((source) => source.id === selectedId) ?? null)
+    : null;
+  const details = selected ? (detailsMap[selected.id] ?? null) : null;
 
   const allFilteredChecked =
     filtered.length > 0 && filtered.every((source) => checkedIds.includes(source.id));
   const someFilteredChecked =
     !allFilteredChecked &&
     filtered.some((source) => checkedIds.includes(source.id));
+
+  function updateSource(id: string, patch: Partial<DataSource>) {
+    setSources((prev) =>
+      prev.map((source) => (source.id === id ? { ...source, ...patch } : source)),
+    );
+  }
 
   function toggleAll() {
     if (allFilteredChecked) {
@@ -129,22 +168,109 @@ export function FontesView() {
     );
   }
 
-  const BoxIcon = boxIcons[details.boxIcon] ?? Database;
+  function selectSource(id: string) {
+    setSelectedId(id);
+    setTab("Visão geral");
+    setShowAllFields(false);
+  }
+
+  /** Sincronização simulada: “Requer atenção” continua falhando; o resto passa. */
+  function syncSource(id: string) {
+    const source = sources.find((item) => item.id === id);
+    if (!source) return;
+    const wasFailing = source.status === "Requer atenção";
+    updateSource(id, { status: "Processando", updatedMeta: "agora · Sincronização" });
+    setMessage({ tone: "info", text: `Sincronizando “${source.name}”…` });
+    setTimeout(() => {
+      if (wasFailing) {
+        updateSource(id, { status: "Requer atenção" });
+        setMessage({
+          tone: "error",
+          text: `Falha ao sincronizar “${source.name}”. Revise a conexão.`,
+        });
+        return;
+      }
+      updateSource(id, {
+        status: source.type === "PostgreSQL" ? "Conectada" : "Disponível",
+        updatedMeta: "agora · Manual",
+      });
+      setMessage({
+        tone: "success",
+        text: `“${source.name}” sincronizada com sucesso (simulação).`,
+      });
+    }, 1600);
+  }
+
+  function handleRemove(id: string) {
+    const source = sources.find((item) => item.id === id);
+    setSources((prev) => prev.filter((item) => item.id !== id));
+    if (selectedId === id) setSelectedId(null);
+    setMessage({
+      tone: "info",
+      text: `“${source?.name ?? "Fonte"}” removida nesta sessão.`,
+    });
+  }
+
+  const BoxIcon = details ? (boxIcons[details.boxIcon] ?? Database) : Database;
+  const selectedFields = details?.columns ?? [];
+  const visibleFields = showAllFields
+    ? selectedFields
+    : selectedFields.slice(0, Math.min(3, selectedFields.length));
 
   return (
-    <div className="flex w-full flex-col items-start gap-5 lg:flex-row">
+    <div className="flex w-full flex-col gap-5">
+      {/* Aviso contextual: fonte que precisa de revisão */}
+      {sources.some((source) => source.status === "Requer atenção") && (
+        <div className="flex w-full flex-col items-start gap-3 rounded-lg bg-warning-bg p-4 sm:flex-row sm:items-center">
+          <TriangleAlert
+            size={18}
+            aria-hidden="true"
+            className="shrink-0 text-warning"
+          />
+          <p className="min-w-0 flex-1 text-xs leading-[1.5] text-warning">
+            A conexão de{" "}
+            {sources.find((source) => source.status === "Requer atenção")?.name}{" "}
+            precisa de uma nova credencial. As demais fontes continuam
+            disponíveis normalmente.
+          </p>
+          <Button
+            variant="subtle"
+            size="sm"
+            className="shrink-0 whitespace-nowrap text-warning!"
+            onClick={() =>
+              setReviewFor(
+                sources.find((source) => source.status === "Requer atenção") ?? null,
+              )
+            }
+          >
+            Revisar conexão →
+          </Button>
+        </div>
+      )}
+
+      <div className="flex w-full flex-col items-start gap-5 lg:flex-row">
       {/* Catálogo de fontes */}
       <Card className="flex min-w-0 flex-1 flex-col overflow-hidden lg:h-[759px]">
-        <div className="flex w-full shrink-0 items-center justify-between p-5">
+        <div className="flex w-full shrink-0 items-center justify-between gap-3 p-5">
           <div className="flex items-center gap-2">
             <h2 className="text-lg leading-[1.5] text-ink">Todas as fontes</h2>
             <span className="rounded-md bg-background px-[9px] py-1 text-xs font-medium leading-[1.5] text-muted">
               {filtered.length}
             </span>
           </div>
-          <div className="flex items-center gap-[7px]">
-            <ArrowDownUp size={14} aria-hidden="true" className="text-muted" />
-            <p className="text-xs leading-[1.5] text-muted">Mais recentes</p>
+          <div className="flex items-center gap-3">
+            <div className="hidden items-center gap-[7px] sm:flex">
+              <ArrowDownUp size={14} aria-hidden="true" className="text-muted" />
+              <p className="text-xs leading-[1.5] text-muted">Mais recentes</p>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              startIcon={<Plus size={14} />}
+              onClick={() => setAddOpen(true)}
+            >
+              Adicionar fonte
+            </Button>
           </div>
         </div>
 
@@ -152,7 +278,10 @@ export function FontesView() {
           <TextField
             size="small"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setPage(1);
+            }}
             placeholder="Buscar por nome ou conexão"
             className="min-w-0 flex-1"
             slotProps={{
@@ -169,7 +298,10 @@ export function FontesView() {
 
           <Select
             value={typeFilter}
-            onChange={(event) => setTypeFilter(event.target.value)}
+            onChange={(event) => {
+              setTypeFilter(event.target.value);
+              setPage(1);
+            }}
             size="small"
             aria-label="Filtrar por tipo"
             className="shrink-0"
@@ -184,7 +316,10 @@ export function FontesView() {
 
           <Select
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value)}
+            onChange={(event) => {
+              setStatusFilter(event.target.value);
+              setPage(1);
+            }}
             size="small"
             aria-label="Filtrar por estado"
             className="shrink-0"
@@ -198,8 +333,32 @@ export function FontesView() {
           </Select>
         </div>
 
+        {message && (
+          <div className="w-full px-5 pb-4">
+            <Alert
+              severity={
+                message.tone === "error"
+                  ? "error"
+                  : message.tone === "success"
+                    ? "success"
+                    : "info"
+              }
+              icon={
+                message.tone === "error" ? (
+                  <TriangleAlert size={18} />
+                ) : message.tone === "success" ? (
+                  <CircleCheck size={18} />
+                ) : undefined
+              }
+              onClose={() => setMessage(null)}
+            >
+              {message.text}
+            </Alert>
+          </div>
+        )}
+
         <div className="w-full min-w-0 flex-1 overflow-x-auto">
-          <div className="flex min-w-[700px] flex-col">
+          <div className="flex min-w-[880px] flex-col">
             <div className="flex h-[42px] w-full shrink-0 items-center gap-4 border-y border-line bg-subtle-bg px-5">
               <Checkbox
                 checked={allFilteredChecked}
@@ -221,6 +380,7 @@ export function FontesView() {
               <p className="w-[152px] shrink-0 text-[11px] font-semibold leading-[1.5] text-muted">
                 ATUALIZAÇÃO
               </p>
+              <span aria-hidden className="w-[148px] shrink-0" />
               <span aria-hidden className="size-4 shrink-0" />
             </div>
 
@@ -232,14 +392,14 @@ export function FontesView() {
               </div>
             )}
 
-            {filtered.map((source) => {
-              const isSelected = source.id === selected.id;
+            {pageRows.map((source) => {
+              const isSelected = selected?.id === source.id;
               const isChecked = checkedIds.includes(source.id);
               const statusStyle = statusStyles[source.status];
               return (
                 <div
                   key={source.id}
-                  onClick={() => setSelectedId(source.id)}
+                  onClick={() => selectSource(source.id)}
                   className={`flex h-20 w-full shrink-0 cursor-pointer items-center gap-4 border-b border-line px-5 ${
                     isSelected ? "border-l-[3px] bg-selection" : "bg-surface"
                   }`}
@@ -290,6 +450,31 @@ export function FontesView() {
                     <p className="text-[10px] text-muted">{source.updatedMeta}</p>
                   </div>
 
+                  <span
+                    className="flex w-[148px] shrink-0 items-center justify-end gap-1"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <Button
+                      href={`/fontes-de-dados/${source.id}/preparar`}
+                      variant="subtle"
+                      size="sm"
+                      className="whitespace-nowrap text-brand!"
+                      startIcon={<Code size={14} aria-hidden="true" />}
+                      aria-label={`Preparar ${source.name}`}
+                    >
+                      Preparar
+                    </Button>
+                    <IconButton
+                      size="small"
+                      aria-label={`Mais ações de ${source.name}`}
+                      onClick={(event) =>
+                        setMenu({ id: source.id, anchor: event.currentTarget })
+                      }
+                    >
+                      <MoreVertical size={16} />
+                    </IconButton>
+                  </span>
+
                   <ChevronRight
                     size={16}
                     aria-hidden="true"
@@ -301,33 +486,129 @@ export function FontesView() {
           </div>
         </div>
 
+        {/* Paginação funcional */}
         <div className="flex h-[62px] w-full shrink-0 items-center justify-between px-5">
           <p className="text-xs leading-[1.5] text-muted">
-            Exibindo {filtered.length > 0 ? 1 : 0}–{filtered.length} de{" "}
-            {dataSources.length} fontes
+            Exibindo {start}–{end} de {filtered.length} fontes
           </p>
           <div className="flex items-center gap-1">
-            <IconButton size="small" disabled aria-label="Página anterior">
+            <IconButton
+              size="small"
+              disabled={safePage <= 1}
+              aria-label="Página anterior"
+              onClick={() => setPage(safePage - 1)}
+            >
               <ChevronLeft size={16} />
             </IconButton>
-            <span className="flex size-7 items-center justify-center rounded-md bg-selection text-xs font-semibold leading-[1.5] text-brand">
-              1
-            </span>
-            <IconButton size="small" disabled aria-label="Próxima página">
+            {Array.from({ length: pageCount }, (_, index) => index + 1).map(
+              (number) => (
+                <button
+                  key={number}
+                  type="button"
+                  aria-label={`Página ${number}`}
+                  aria-current={number === safePage ? "page" : undefined}
+                  onClick={() => setPage(number)}
+                  className={`flex size-7 items-center justify-center rounded-md text-xs font-semibold leading-[1.5] transition-colors ${
+                    number === safePage
+                      ? "bg-selection text-brand"
+                      : "text-muted hover:bg-subtle-bg"
+                  }`}
+                >
+                  {number}
+                </button>
+              ),
+            )}
+            <IconButton
+              size="small"
+              disabled={safePage >= pageCount}
+              aria-label="Próxima página"
+              onClick={() => setPage(safePage + 1)}
+            >
               <ChevronRight size={16} />
             </IconButton>
           </div>
         </div>
       </Card>
 
-      {/* Detalhes da fonte selecionada */}
-      <Card
-        component="aside"
-        className="flex w-full shrink-0 flex-col overflow-hidden lg:w-[336px]"
+      {/* Menu "Mais ações" da linha */}
+      <Menu
+        anchorEl={menu?.anchor}
+        open={menu !== null}
+        onClose={() => setMenu(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
       >
+        {menu &&
+          (() => {
+            const source = sources.find((item) => item.id === menu.id);
+            if (!source) return null;
+            return (
+              <>
+                <MenuItem
+                  onClick={() => {
+                    selectSource(source.id);
+                    setMenu(null);
+                  }}
+                >
+                  Ver detalhes
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setEditFor(source);
+                    setMenu(null);
+                  }}
+                >
+                  Editar conexão
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    syncSource(source.id);
+                    setMenu(null);
+                  }}
+                >
+                  Sincronizar agora
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    setReviewFor(source);
+                    setMenu(null);
+                  }}
+                >
+                  Revisar conexão
+                </MenuItem>
+                <MenuItem
+                  onClick={() => {
+                    handleRemove(source.id);
+                    setMenu(null);
+                  }}
+                  sx={{ color: "var(--color-error)" }}
+                >
+                  <Trash2 size={14} aria-hidden="true" className="mr-2" />
+                  Remover fonte
+                </MenuItem>
+              </>
+            );
+          })()}
+      </Menu>
+
+      {/* Detalhes da fonte — abre ao lado apenas quando uma fonte é selecionada */}
+      {selected && details && (
+        <Card
+          component="aside"
+          aria-label={`Detalhes de ${selected.name}`}
+          className="flex w-full shrink-0 flex-col overflow-hidden lg:w-[336px]"
+        >
           <div className="flex w-full shrink-0 items-center justify-between p-5">
-            <h2 className="text-base leading-[1.5] text-ink">Detalhes da fonte</h2>
-            <span aria-hidden className="size-[17px] shrink-0" />
+            <h2 className="text-base leading-[1.5] text-ink">
+              Detalhes da fonte
+            </h2>
+            <IconButton
+              size="small"
+              aria-label="Fechar detalhes"
+              onClick={() => setSelectedId(null)}
+            >
+              <X size={16} />
+            </IconButton>
           </div>
           <div aria-hidden className="h-px w-full shrink-0 bg-line" />
 
@@ -336,9 +617,9 @@ export function FontesView() {
               <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-selection">
                 <BoxIcon size={23} aria-hidden="true" className="text-brand" />
               </span>
-              <div className="flex flex-col gap-[2px] whitespace-nowrap leading-[1.5]">
-                <p className="text-lg text-ink">{selected.name}</p>
-                <p className="text-xs text-muted">{details.subtitle}</p>
+              <div className="flex min-w-0 flex-col gap-[2px] leading-[1.5]">
+                <p className="truncate text-lg text-ink">{selected.name}</p>
+                <p className="truncate text-xs text-muted">{details.subtitle}</p>
               </div>
             </div>
 
@@ -360,18 +641,18 @@ export function FontesView() {
               details.properties.map((property) => (
                 <div
                   key={property.label}
-                  className="flex w-full items-start justify-between whitespace-nowrap text-xs leading-[1.5]"
+                  className="flex w-full items-start justify-between gap-3 text-xs leading-[1.5]"
                 >
                   <p className="text-muted">{property.label}</p>
-                  <p className="font-medium text-ink">{property.value}</p>
+                  <p className="text-right font-medium text-ink">{property.value}</p>
                 </div>
               ))}
 
             {tab === "Campos" && (
               <div className="flex w-full flex-col gap-2">
-                {details.columns ? (
+                {selectedFields.length > 0 ? (
                   <>
-                    {details.columns.map((column) => (
+                    {visibleFields.map((column) => (
                       <div
                         key={column.name}
                         className="flex w-full items-center justify-between gap-3 text-xs leading-[1.5]"
@@ -381,9 +662,19 @@ export function FontesView() {
                       </div>
                     ))}
                     <p className="text-[11px] leading-[1.5] text-muted">
-                      Exibindo {details.columns.length} de {details.totalColumns}{" "}
+                      Exibindo {visibleFields.length} de {details.totalColumns}{" "}
                       campos.
                     </p>
+                    <Button
+                      variant="subtle"
+                      size="sm"
+                      className="self-start text-brand!"
+                      onClick={() => setShowAllFields((current) => !current)}
+                    >
+                      {showAllFields
+                        ? "Mostrar menos"
+                        : `Ver todos os campos (${selectedFields.length})`}
+                    </Button>
                   </>
                 ) : (
                   <p className="text-xs leading-[1.5] text-muted">
@@ -395,7 +686,7 @@ export function FontesView() {
 
             {tab === "Histórico" && (
               <div className="flex w-full flex-col gap-2">
-                <div className="flex w-full items-center justify-between gap-3 whitespace-nowrap text-xs leading-[1.5]">
+                <div className="flex w-full items-center justify-between gap-3 text-xs leading-[1.5]">
                   <p className="text-ink">{selected.updatedDate}</p>
                   <p className="text-muted">{selected.updatedMeta}</p>
                 </div>
@@ -439,19 +730,93 @@ export function FontesView() {
               </div>
             )}
 
-            <Button variant="primary" size="md">
+            {selected.status === "Requer atenção" && (
+              <div className="flex w-full shrink-0 items-start gap-2 rounded-lg bg-warning-bg p-3">
+                <TriangleAlert
+                  size={17}
+                  aria-hidden="true"
+                  className="mt-px shrink-0 text-warning"
+                />
+                <div className="flex min-w-0 flex-1 flex-col gap-[3px] leading-[1.5] text-warning">
+                  <p className="text-xs font-semibold">Conexão com problema</p>
+                  <p className="text-[11px]">
+                    A última sincronização falhou. Revise a conexão.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <Button
+              variant="primary"
+              size="md"
+              className="w-full"
+              onClick={() => syncSource(selected.id)}
+            >
               <Star size={16} aria-hidden="true" />
               Sincronizar agora
             </Button>
 
-            <button
-              type="button"
-              className="text-xs font-medium leading-[1.5] text-brand transition-colors hover:text-brand-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-            >
-              Editar conexão →
-            </button>
+            <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2">
+              <button
+                type="button"
+                onClick={() => setEditFor(selected)}
+                className="text-xs font-medium leading-[1.5] text-brand transition-colors hover:text-brand-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                Editar conexão →
+              </button>
+              <button
+                type="button"
+                onClick={() => setReviewFor(selected)}
+                className="text-xs font-medium leading-[1.5] text-brand transition-colors hover:text-brand-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              >
+                Revisar conexão →
+              </button>
+            </div>
           </div>
-      </Card>
+        </Card>
+      )}
+
+      </div>
+
+      <AddSourceDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onCreated={(source, details) => {
+          setSources((prev) => [source, ...prev]);
+          setDetailsMap((prev) => ({ ...prev, [source.id]: details }));
+          setPage(1);
+          setMessage({
+            tone: "success",
+            text: `Fonte “${source.name}” criada com sucesso (simulação).`,
+          });
+          selectSource(source.id);
+        }}
+      />
+
+      <EditConnectionDialog
+        source={editFor}
+        onClose={() => setEditFor(null)}
+        onSaved={(name) => {
+          if (!editFor) return;
+          updateSource(editFor.id, { name });
+          setMessage({
+            tone: "success",
+            text: `Conexão de “${name}” atualizada (simulação).`,
+          });
+        }}
+      />
+
+      <ReviewConnectionDialog
+        source={reviewFor}
+        onClose={() => setReviewFor(null)}
+        onFixed={() => {
+          if (!reviewFor) return;
+          updateSource(reviewFor.id, {
+            status: reviewFor.type === "API REST" ? "Disponível" : "Conectada",
+            updatedMeta: "agora · Teste manual",
+          });
+        }}
+      />
     </div>
   );
 }

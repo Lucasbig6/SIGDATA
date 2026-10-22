@@ -228,3 +228,47 @@ export const statusOptions: Array<"Todos os estados" | SourceStatus> = [
   "Processando",
   "Requer atenção",
 ];
+
+export interface SourceStat {
+  title: string;
+  value: string;
+  context: string;
+  /** Mostra o ícone de banco no card (só no primeiro). */
+  icon: boolean;
+}
+
+/** Cards de resumo da tela /fontes-de-dados (coerentes com dataSources). */
+export const sourceStats: SourceStat[] = [
+  {
+    title: "Total de fontes",
+    value: String(dataSources.length),
+    context: "Conexões e arquivos",
+    icon: true,
+  },
+  {
+    title: "Prontas para análise",
+    value: String(
+      dataSources.filter(
+        (source) => source.status === "Conectada" || source.status === "Disponível",
+      ).length,
+    ),
+    context: "Disponíveis para seus projetos",
+    icon: false,
+  },
+  {
+    title: "Em processamento",
+    value: String(
+      dataSources.filter((source) => source.status === "Processando").length,
+    ),
+    context: "Custos operacionais",
+    icon: false,
+  },
+  {
+    title: "Requer atenção",
+    value: String(
+      dataSources.filter((source) => source.status === "Requer atenção").length,
+    ),
+    context: "Revise a conexão de Estoque",
+    icon: false,
+  },
+];

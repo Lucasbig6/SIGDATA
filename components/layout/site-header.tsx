@@ -1,15 +1,14 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { NavPill } from "@/components/ui/nav-pill";
 import { Search } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
-import { LogIn } from  "lucide-react";
+import { UserMenu } from "./user-menu";
 
-type NavItemKey = "inicio" | "projetos" | "fontes" | "painel";
+type NavItemKey = "inicio" | "projetos" | "fontes";
 
 const navItems: {
   key: NavItemKey;
@@ -20,23 +19,28 @@ const navItems: {
   { key: "inicio", label: "Início", href: "/" },
   { key: "projetos", label: "Projetos", href: "/projetos" },
   { key: "fontes", label: "Fontes de Dados", href: "/fontes-de-dados" },
-  { key: "painel", label: "Painéis", href: "/paineis" },
 ];
 
-function getActiveItem(pathname: string): NavItemKey {
+function getActiveItem(pathname: string): NavItemKey | null {
   if (pathname.startsWith("/projetos")) return "projetos";
   if (pathname.startsWith("/fontes-de-dados")) return "fontes";
-  if (pathname.startsWith("/paineis")) return "painel";
-  return "inicio";
+  if (pathname === "/") return "inicio";
+  return null;
 }
 
-type SiteHeaderProps = {
-  actionLabel?: string;
-};
-
-export function SiteHeader({ actionLabel = "Entrar" }: SiteHeaderProps) {
+export function SiteHeader() {
   const pathname = usePathname();
+  const router = useRouter();
   const activeItem = getActiveItem(pathname);
+
+  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const value = new FormData(event.currentTarget)
+      .get("q")
+      ?.toString()
+      .trim();
+    router.push(value ? `/projetos?q=${encodeURIComponent(value)}` : "/projetos");
+  }
 
   return (
     <header className="h-20 w-full border-b border-border-default bg-surface">
@@ -65,25 +69,29 @@ export function SiteHeader({ actionLabel = "Entrar" }: SiteHeaderProps) {
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-4">
-          <TextField
-            size="small"
-            placeholder="Pesquisar projetos..."
-            className="hidden w-[320px] lg:flex"
-            slotProps={{
-              htmlInput: { type: "search", "aria-label": "Pesquisar projetos" },
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search size={16} aria-hidden="true" className="text-muted" />
-                  </InputAdornment>
-                ),
-              },
-            }}
-          />
-          <Button variant="primary" size="md">
-            <LogIn size={18} aria-hidden="true" />
-            {actionLabel}
-          </Button>
+          <form
+            role="search"
+            onSubmit={handleSearch}
+            className="hidden lg:block"
+          >
+            <TextField
+              size="small"
+              name="q"
+              placeholder="Pesquisar projetos..."
+              className="w-[320px]"
+              slotProps={{
+                htmlInput: { type: "search", "aria-label": "Pesquisar projetos" },
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search size={16} aria-hidden="true" className="text-muted" />
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+          </form>
+          <UserMenu />
         </div>
       </div>
     </header>

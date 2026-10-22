@@ -7,43 +7,17 @@ import {
   LayoutDashboard,
   LayoutGrid,
   List,
-  Plus,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { ProjectCard } from "./project-card";
 import { FeaturedCard } from "./featured-card";
-
-const featuredProjects = [
-  { id: 1, title: "Projeto 01 — Análise comercial", meta: "14 de jul. de 2026 · 11 fontes" },
-  { id: 2, title: "Metas e Indicadores 2026", meta: "16 de dez. de 2025 · 40 fontes" },
-  { id: 3, title: "Vendas por Regional", meta: "5 de mar. de 2026 · 50 fontes" },
-  { id: 4, title: "Clientes e Recorrência", meta: "30 de set. de 2025 · 38 fontes" },
-  { id: 5, title: "Estoque e Suprimentos", meta: "30 de jan. de 2026 · 13 fontes" },
-];
-
-const recentPanels = [
-  {
-    id: 1,
-    title: "Painel Comercial",
-    description: "Vendas, metas e conversão por regional.",
-    meta: "12 de out. de 2026 · 8 fontes",
-  },
-  {
-    id: 2,
-    title: "Painel Financeiro",
-    description: "Receita, custos e margem por período.",
-    meta: "10 de out. de 2026 · 5 fontes",
-  },
-  {
-    id: 3,
-    title: "Painel de Estoque",
-    description: "Níveis, giro e rupturas por depósito.",
-    meta: "8 de out. de 2026 · 3 fontes",
-  },
-];
+import { NewProjectButton } from "@/components/projeto/new-project-dialog";
+import { useProjects } from "@/lib/projects-store";
+import { recentPanels } from "@/lib/panels-data";
 
 export function ProjectsSection() {
   const [panelsView, setPanelsView] = useState<"grid" | "list">("grid");
+  const projects = useProjects();
+  const featured = projects.slice(0, 5);
 
   return (
     <>
@@ -70,17 +44,16 @@ export function ProjectsSection() {
                 className="transition-transform group-hover:translate-x-0.5"
               />
             </Link>
-            <Button variant="primary" size="md" startIcon={<Plus size={16} />}>
-              Novo projeto
-            </Button>
+            <NewProjectButton />
           </div>
         </div>
         <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          {featuredProjects.map((project) => (
+          {featured.map((project) => (
             <FeaturedCard
               key={project.id}
               title={project.title}
               meta={project.meta}
+              href={project.href}
             />
           ))}
         </div>
@@ -127,7 +100,7 @@ export function ProjectsSection() {
               </button>
             </div>
             <Link
-              href="/projetos/projeto-01"
+              href="/projetos/projeto-01#paineis"
               className="group flex items-center gap-1 text-sm text-text-secondary transition-colors hover:text-brand"
             >
               Ver tudo
@@ -140,13 +113,14 @@ export function ProjectsSection() {
           </div>
         </div>
         {panelsView === "grid" ? (
-          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 cursor-pointer">
             {recentPanels.map((panel) => (
               <ProjectCard
                 key={panel.id}
                 title={panel.title}
                 description={panel.description}
                 meta={panel.meta}
+                href={`${panel.href}#paineis`}
                 icon={<LayoutDashboard size={20} className="text-white" />}
               />
             ))}
@@ -169,7 +143,7 @@ export function ProjectsSection() {
               {recentPanels.map((panel) => (
                 <Link
                   key={panel.id}
-                  href="/projetos/projeto-01"
+                  href={`${panel.href}#paineis`}
                   className="flex h-[72px] w-full shrink-0 items-center gap-4 border-b border-line px-5 transition-colors last:border-b-0 hover:bg-selection"
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-3">

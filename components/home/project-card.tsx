@@ -15,7 +15,7 @@ export function ProjectCard({
   title,
   description,
   meta,
-  href = "/projetos/projeto-01",
+  href = "/projetos",
   icon = <FolderOpen size={20} className="text-white" />,
 }: ProjectCardProps) {
   return (

@@ -10,7 +10,7 @@ type FeaturedCardProps = {
 export function FeaturedCard({
   title,
   meta,
-  href = "/projetos/projeto-01",
+  href = "/projetos",
 }: FeaturedCardProps) {
   return (
     <Link

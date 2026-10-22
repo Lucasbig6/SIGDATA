@@ -9,29 +9,47 @@ import Tooltip from "@mui/material/Tooltip";
 import {
   ArrowUp,
   BookmarkPlus,
+  Check,
   Copy,
   Database,
   Lightbulb,
+  MessageSquarePlus,
   Paperclip,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
 } from "lucide-react";
 import {
-  assistantPlainText,
-  initialAssistantTime as assistantTime,
+  assistantDefaultAnswer,
+  matchAnswer,
+  renderRichText,
+  type AnswerContent,
+} from "@/lib/assistant-rules";
+import { addAnalysis } from "@/lib/analyses-store";
+import { saveResult } from "@/lib/results-store";
+import {
   initialUserQuestion,
   suggestedQuestions,
 } from "@/lib/project-data";
 
 type ChatEntry =
   | { kind: "user"; id: string; time: string; text: string }
-  | { kind: "assistant"; id: string; time: string };
+  | { kind: "assistant"; id: string; time: string; answer: AnswerContent };
 
 function initialConversation(): ChatEntry[] {
   return [
-    { kind: "user", id: "user-initial", time: initialUserQuestion.time, text: initialUserQuestion.text },
-    { kind: "assistant", id: "assistant-initial", time: assistantTime },
+    {
+      kind: "user",
+      id: "user-initial",
+      time: initialUserQuestion.time,
+      text: initialUserQuestion.text,
+    },
+    {
+      kind: "assistant",
+      id: "assistant-initial",
+      time: initialUserQuestion.time,
+      answer: assistantDefaultAnswer,
+    },
   ];
 }
 
@@ -42,68 +60,156 @@ function currentTime(): string {
   });
 }
 
-function AssistantAnswer() {
+/** Ids determinísticos por sessão (sem funções impuras no corpo do handler). */
+let messageCounter = 0;
+function nextId(prefix: string): string {
+  messageCounter += 1;
+  return `${prefix}-${messageCounter}`;
+}
+
+function AnswerBody({
+  entry,
+  projectId,
+  saved,
+  onSave,
+}: {
+  entry: Extract<ChatEntry, { kind: "assistant" }>;
+  projectId?: string;
+  saved: boolean;
+  onSave: () => void;
+}) {
+  const { answer } = entry;
+  const [creating, setCreating] = useState(false);
+  const [created, setCreated] = useState(false);
+
+  const max = answer.chart
+    ? Math.max(...answer.chart.map((item) => item.value))
+    : 1;
+
+  function handleCreateAnalysis() {
+    setCreating(true);
+    // Criação simulada (tempo fixo apenas em handler).
+    setTimeout(() => {
+      if (projectId) {
+        addAnalysis({
+          projectId,
+          title: answer.analysisTitle ?? "Análise gerada pelo assistente",
+          type: "grafico",
+          dataset: "Vendas 2026",
+          dimensionId: "regiao",
+          metricId: "receita",
+        });
+      }
+      setCreating(false);
+      setCreated(true);
+    }, 900);
+  }
+
   return (
     <div className="flex w-full flex-col items-start gap-[14px]">
-      <p className="w-full text-sm leading-[1.65] text-ink">
-        Em setembro, a receita líquida chegou a{" "}
-        <strong className="font-bold">R$ 2,48 milhões</strong>, um crescimento
-        de <strong className="font-bold">12,4%</strong> sobre agosto (R$ 2,21
-        milhões). O avanço foi de R$ 273,6 mil.{" "}
-        <span className="font-semibold text-brand">[1]</span>
-      </p>
-
-      <div className="flex w-full flex-col items-start gap-[9px] text-[13px]">
-        <div className="flex w-full items-start gap-[10px]">
-          <p className="shrink-0 leading-[1.5] text-brand">•</p>
-          <p className="min-w-0 flex-1 leading-[1.6] text-ink">
-            Sudeste liderou o avanço. R$ 180 mil adicionais, equivalentes a
-            65,8% do crescimento total. [1]
-          </p>
-        </div>
-        <div className="flex w-full items-start gap-[10px]">
-          <p className="shrink-0 leading-[1.5] text-brand">•</p>
-          <p className="min-w-0 flex-1 leading-[1.6] text-ink">
-            Sul foi o segundo destaque. Contribuição de R$ 62 mil; Nordeste e
-            Centro-Oeste somaram R$ 31,6 mil. [1]
-          </p>
-        </div>
-        <div className="flex w-full items-start gap-[10px]">
-          <p className="shrink-0 leading-[1.5] text-brand">•</p>
-          <p className="min-w-0 flex-1 leading-[1.6] text-ink">
-            Meta mensal superada. A receita ficou 5,5% acima da meta de R$ 2,35
-            milhões. [1, 2]
-          </p>
-        </div>
-      </div>
-
-      <div className="flex w-full items-start gap-[9px] rounded-lg bg-subtle-bg p-3">
-        <Lightbulb size={16} aria-hidden="true" className="mt-px shrink-0 text-brand" />
-        <p className="min-w-0 flex-1 text-xs leading-[1.5] text-ink">
-          Próximo passo: detalhar os segmentos de clientes do Sudeste para
-          identificar o que impulsionou a receita.
+      {answer.intro.map((paragraph, index) => (
+        <p key={index} className="w-full text-sm leading-[1.65] text-ink">
+          {renderRichText(paragraph)}
         </p>
-      </div>
+      ))}
 
-      <div className="flex w-full flex-wrap content-start items-start gap-[7px]">
-        <Chip
-          size="small"
-          label="1 · Vendas 2026"
-          sx={{
-            bgcolor: "var(--color-selection)",
-            color: "var(--color-brand)",
-            borderRadius: "6px",
-          }}
-        />
-        <Chip
-          size="small"
-          label="2 · Metas comerciais"
-          sx={{
-            bgcolor: "var(--color-selection)",
-            color: "var(--color-brand)",
-            borderRadius: "6px",
-          }}
-        />
+      {answer.bullets.length > 0 && (
+        <div className="flex w-full flex-col items-start gap-[9px] text-[13px]">
+          {answer.bullets.map((bullet) => (
+            <div key={bullet} className="flex w-full items-start gap-[10px]">
+              <p className="shrink-0 leading-[1.5] text-brand">•</p>
+              <p className="min-w-0 flex-1 leading-[1.6] text-ink">{bullet}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {answer.tip && (
+        <div className="flex w-full items-start gap-[9px] rounded-lg bg-subtle-bg p-3">
+          <Lightbulb size={16} aria-hidden="true" className="mt-px shrink-0 text-brand" />
+          <p className="min-w-0 flex-1 text-xs leading-[1.5] text-ink">
+            {renderRichText(answer.tip)}
+          </p>
+        </div>
+      )}
+
+      {/* Prévia gerada sob demanda (atualiza a área de resultados) */}
+      {answer.chart && (
+        <div className="flex w-full flex-col gap-3 rounded-xl border border-border-default p-3">
+          <p className="text-xs font-semibold leading-[1.5] text-ink">
+            {answer.chartTitle}
+          </p>
+          {answer.chart.map((item) => (
+            <div key={item.label} className="flex items-center gap-3">
+              <p className="w-[92px] shrink-0 truncate text-[11px] leading-[1.5] text-ink">
+                {item.label}
+              </p>
+              <div className="h-3 min-w-0 flex-1 rounded bg-subtle-bg">
+                <div
+                  className="h-3 rounded bg-gradient-to-r from-brand to-brand-accent"
+                  style={{ width: `${Math.max(6, (item.value / max) * 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+          {answer.analysisTitle && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {created ? (
+                <p className="flex items-center gap-1.5 text-[11px] leading-[1.5] text-success">
+                  <Check size={13} aria-hidden="true" />
+                  Rascunho criado — veja a aba Análises
+                </p>
+              ) : (
+                <span className="text-[11px] leading-[1.5] text-muted">
+                  Dados fictícios, prévia ilustrativa
+                </span>
+              )}
+              {!created && (
+                <MuiButton
+                  variant="outlined"
+                  color="primary"
+                  size="small"
+                  disabled={creating}
+                  onClick={handleCreateAnalysis}
+                  sx={{ textTransform: "none", fontSize: "0.6875rem" }}
+                >
+                  {creating ? "Criando análise…" : "Criar análise em rascunho"}
+                </MuiButton>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {answer.sources.length > 0 && (
+        <div className="flex w-full flex-wrap content-start items-start gap-[7px]">
+          {answer.sources.map((source) => (
+            <Chip
+              key={source}
+              size="small"
+              label={source}
+              sx={{
+                bgcolor: "var(--color-selection)",
+                color: "var(--color-brand)",
+                borderRadius: "6px",
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="flex w-full flex-wrap items-center gap-2">
+        <Tooltip title="Salvar nos resultados">
+          <IconButton size="small" onClick={onSave} aria-label="Salvar nos resultados">
+            <BookmarkPlus size={15} />
+          </IconButton>
+        </Tooltip>
+        {saved && (
+          <span className="flex items-center gap-1 text-xs leading-[1.5] text-success">
+            <Check size={13} aria-hidden="true" />
+            Salvo nos resultados
+          </span>
+        )}
       </div>
     </div>
   );
@@ -111,40 +217,65 @@ function AssistantAnswer() {
 
 type AnalysisChatProps = {
   selectedCount: number;
+  projectId?: string;
 };
 
-export function AnalysisChat({ selectedCount }: AnalysisChatProps) {
+export function AnalysisChat({ selectedCount, projectId }: AnalysisChatProps) {
   const [messages, setMessages] = useState<ChatEntry[]>(initialConversation);
   const [draft, setDraft] = useState("");
   const [copied, setCopied] = useState(false);
   const [vote, setVote] = useState<"up" | "down" | null>(null);
+  const [pending, setPending] = useState(false);
+  const [savedIds, setSavedIds] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const node = scrollRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [messages]);
+  }, [messages, pending]);
 
-  function send() {
-    const text = draft.trim();
-    if (!text) return;
+  function send(textOverride?: string) {
+    const text = (textOverride ?? draft).trim();
+    if (!text || pending) return;
+    const userId = nextId("user");
     setMessages((prev) => [
       ...prev,
-      { kind: "user", id: `user-${Date.now()}`, time: currentTime(), text },
+      { kind: "user", id: userId, time: currentTime(), text },
     ]);
     setDraft("");
+    setVote(null);
+    setPending(true);
+    // Resposta simulada (tempo fixo apenas em handler).
+    setTimeout(() => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          kind: "assistant",
+          id: nextId("assistant"),
+          time: currentTime(),
+          answer: matchAnswer(text),
+        },
+      ]);
+      setPending(false);
+    }, 900);
   }
 
   function resetConversation() {
-    setMessages(initialConversation());
+    setMessages([]);
     setDraft("");
     setCopied(false);
     setVote(null);
+    setPending(false);
+    setSavedIds([]);
   }
 
-  async function copyAnswer() {
+  async function copyAnswer(answer: AnswerContent) {
+    const text = [...answer.intro, ...answer.bullets, answer.tip ?? ""]
+      .filter(Boolean)
+      .join("\n")
+      .replace(/\*\*/g, "");
     try {
-      await navigator.clipboard.writeText(assistantPlainText);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -161,9 +292,10 @@ export function AnalysisChat({ selectedCount }: AnalysisChatProps) {
           <button
             type="button"
             onClick={resetConversation}
-            className="whitespace-pre text-xs leading-[1.5] text-muted transition-colors hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            className="flex items-center gap-1 whitespace-pre text-xs leading-[1.5] text-muted transition-colors hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
-            {"Nova conversa  +"}
+            <MessageSquarePlus size={13} aria-hidden="true" />
+            Nova conversa
           </button>
         </div>
       </div>
@@ -178,6 +310,19 @@ export function AnalysisChat({ selectedCount }: AnalysisChatProps) {
             {selectedCount} fontes conectadas · Análise comercial
           </p>
         </div>
+
+        {messages.length === 0 && !pending && (
+          <div className="flex w-full flex-col items-center gap-2 rounded-xl border border-dashed border-border-default px-6 py-10 text-center">
+            <Sparkles size={24} aria-hidden="true" className="text-muted" />
+            <p className="text-sm font-semibold leading-[1.5] text-ink">
+              Nova conversa iniciada
+            </p>
+            <p className="max-w-[360px] text-xs leading-[1.5] text-muted">
+              Pergunte sobre receita, regiões, metas ou segmentos. As respostas
+              são simuladas com dados fictícios deste protótipo.
+            </p>
+          </div>
+        )}
 
         {messages.map((entry) =>
           entry.kind === "user" ? (
@@ -207,11 +352,28 @@ export function AnalysisChat({ selectedCount }: AnalysisChatProps) {
                 </p>
               </div>
 
-              <AssistantAnswer />
+              <AnswerBody
+                entry={entry}
+                projectId={projectId}
+                saved={savedIds.includes(entry.id)}
+                onSave={() => {
+                  saveResult(
+                    entry.answer.analysisTitle ??
+                      entry.answer.intro[0].slice(0, 64).replace(/\*\*/g, "") + "…",
+                  );
+                  setSavedIds((prev) =>
+                    prev.includes(entry.id) ? prev : [...prev, entry.id],
+                  );
+                }}
+              />
 
               <div className="flex w-full flex-wrap items-center gap-2">
                 <Tooltip title="Copiar resposta">
-                  <IconButton size="small" onClick={copyAnswer} aria-label="Copiar resposta">
+                  <IconButton
+                    size="small"
+                    onClick={() => copyAnswer(entry.answer)}
+                    aria-label="Copiar resposta"
+                  >
                     <Copy size={15} />
                   </IconButton>
                 </Tooltip>
@@ -245,21 +407,32 @@ export function AnalysisChat({ selectedCount }: AnalysisChatProps) {
                     <ThumbsDown size={15} />
                   </IconButton>
                 </Tooltip>
-                <MuiButton
-                  variant="text"
-                  color="primary"
-                  size="small"
-                  startIcon={<BookmarkPlus size={15} />}
-                  className="px-0! text-brand!"
-                >
-                  Salvar nos resultados
-                </MuiButton>
                 {copied && (
                   <span className="text-xs leading-[1.5] text-brand">Copiado</span>
                 )}
               </div>
             </div>
           ),
+        )}
+
+        {pending && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex w-full shrink-0 items-center gap-2"
+          >
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-brand">
+              <Sparkles size={16} aria-hidden="true" className="text-white" />
+            </span>
+            <p className="text-[13px] leading-[1.5] text-muted">
+              Analisando as fontes conectadas
+              <span className="ml-1 inline-flex gap-0.5">
+                <span className="size-1.5 animate-bounce rounded-full bg-muted [animation-delay:0ms]" />
+                <span className="size-1.5 animate-bounce rounded-full bg-muted [animation-delay:150ms]" />
+                <span className="size-1.5 animate-bounce rounded-full bg-muted [animation-delay:300ms]" />
+              </span>
+            </p>
+          </div>
         )}
       </div>
 
@@ -270,7 +443,7 @@ export function AnalysisChat({ selectedCount }: AnalysisChatProps) {
               key={question}
               variant="outlined"
               size="small"
-              onClick={() => setDraft(question.replace(" ↗", ""))}
+              onClick={() => send(question.replace(" ↗", ""))}
               sx={{
                 flex: 1,
                 minWidth: 0,
@@ -314,7 +487,8 @@ export function AnalysisChat({ selectedCount }: AnalysisChatProps) {
             <IconButton
               color="primary"
               size="small"
-              onClick={send}
+              onClick={() => send()}
+              disabled={pending || draft.trim().length === 0}
               aria-label="Enviar mensagem"
               sx={{
                 width: 30,
@@ -330,7 +504,8 @@ export function AnalysisChat({ selectedCount }: AnalysisChatProps) {
         </div>
 
         <p className="w-full text-center text-[10px] leading-[1.5] text-muted">
-          A IA pode cometer erros. Confira os resultados nas fontes indicadas.
+          Respostas simuladas com dados fictícios. Confira os números nas fontes
+          indicadas.
         </p>
       </div>
     </Card>
