@@ -48,12 +48,17 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
     getHashSnapshot,
     getServerHashSnapshot,
   );
-  const [selectedTab, setSelectedTab] = useState<ProjectTab | null>(null);
-  const tab: ProjectTab =
-    selectedTab ??
-    (tabs.some((item) => item.value === hash)
-      ? (hash as ProjectTab)
-      : "explorar");
+
+  // A aba ativa vive na URL: cliques nas abas e links com hash (#analises,
+  // #paineis) ficam sempre sincronizados.
+  const tab: ProjectTab = tabs.some((item) => item.value === hash)
+    ? (hash as ProjectTab)
+    : "explorar";
+
+  function selectTab(next: ProjectTab) {
+    window.location.hash = next;
+  }
+
   const [shareOpen, setShareOpen] = useState(false);
 
   if (!project) {
@@ -97,7 +102,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
               <Button
                 variant="primary"
                 size="md"
-                onClick={() => setSelectedTab("paineis")}
+                onClick={() => selectTab("paineis")}
               >
                 Abrir painel
               </Button>
@@ -108,7 +113,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
         {/* Abas contextuais */}
         <Tabs
           value={tab}
-          onChange={(_event, next: ProjectTab) => setSelectedTab(next)}
+          onChange={(_event, next: ProjectTab) => selectTab(next)}
           variant="scrollable"
           allowScrollButtonsMobile
           aria-label="Seções do projeto"
@@ -131,7 +136,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       {/* Conteúdo da aba ativa */}
       {tab === "explorar" && (
         <div className={`${container} flex flex-col gap-6`}>
-          <ProjectWorkspace />
+          <ProjectWorkspace projectId={projectId} />
           <ExplorePanel projectId={projectId} />
         </div>
       )}

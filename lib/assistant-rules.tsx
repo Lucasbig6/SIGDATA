@@ -25,6 +25,7 @@ const revenueAnswer: AnswerContent = {
   ],
   tip: "Próximo passo: detalhar os segmentos de clientes do Sudeste para identificar o que impulsionou a receita.",
   sources: ["1 · Vendas 2026", "2 · Metas comerciais"],
+  analysisTitle: "Receita de setembro (gerado pelo assistente)",
 };
 
 const regionAnswer: AnswerContent = {
@@ -80,6 +81,7 @@ const segmentAnswer: AnswerContent = {
   ],
   tip: "Sugestão: cruzar Varejo x Sudeste para identificar os produtos que puxaram o crescimento.",
   sources: ["1 · Vendas 2026", "3 · Clientes"],
+  analysisTitle: "Segmentos de clientes (gerado pelo assistente)",
 };
 
 const monthlyAnswer: AnswerContent = {
@@ -93,6 +95,7 @@ const monthlyAnswer: AnswerContent = {
   ],
   tip: "Atenção: projeção ingênua, sem sazonalidade formal — use apenas como referência.",
   sources: ["1 · Vendas 2026"],
+  analysisTitle: "Evolução mensal da receita (gerado pelo assistente)",
 };
 
 const productAnswer: AnswerContent = {
